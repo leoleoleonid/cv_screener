@@ -4,7 +4,7 @@ import random
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -16,6 +16,7 @@ from app.services.cv_generator import (
     MockCVTextGenerator,
     MockImageGenerator,
 )
+from app.services.cvs_preprocessing_service import CVSPreprocessingService
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 ROOT_DIR = BASE_DIR.parent
@@ -89,6 +90,8 @@ cv_generator = CVGenerator(
     image_generator=image_generator,
 )
 
+cv_preprocessing_service = CVSPreprocessingService(static_dir=STATIC_DIR)
+
 
 @app.post("/chat")
 def chat(message: ChatMessage):
@@ -100,6 +103,15 @@ def chat(message: ChatMessage):
 def generate_static_file():
     pdf_path = cv_generator.generate()
     return {"message": "Generated CV", "file": pdf_path.name}
+
+
+@app.get("/cv-files/text")
+def get_cv_file_texts():
+    try:
+        return cv_preprocessing_service.extract_texts()
+    except Exception:
+        logger.exception("Failed to extract text from CV files.")
+        raise HTTPException(status_code=500, detail="Failed to read CV files")
 
 
 @app.get("/health")
