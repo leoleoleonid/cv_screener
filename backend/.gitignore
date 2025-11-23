@@ -15,4 +15,4 @@ venv/
 *.swp
 *.swo
 
-./venv_local/*
+./venv/*

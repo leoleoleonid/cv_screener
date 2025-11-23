@@ -4,7 +4,8 @@ services:
   backend:
     build: ./backend
     container_name: ai-cv-backend
-    network_mode: host
+    ports:
+      - "8000:8000"
     volumes:
       - ./backend/static:/app/static
       - ./backend/cv_faiss_index:/app/cv_faiss_index
@@ -12,15 +13,14 @@ services:
     env_file:
       - .env
     restart: unless-stopped
-    # ports: 8000:8000  <-- УБРАТЬ, host mode не поддерживает ports
 
   frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
     container_name: ai-cv-frontend
-    network_mode: host
+    ports:
+      - "3000:3000"
     depends_on:
       - backend
     restart: unless-stopped
-    # ports: 3000:3000 <-- тоже убрать

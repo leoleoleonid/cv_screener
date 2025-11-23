@@ -1,12 +1,11 @@
 import json
 import logging
 import random
-import shutil
 import unicodedata
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 from uuid import uuid4
 
 from google import genai
@@ -255,15 +254,13 @@ class MockImageGenerator(CandidateImageGenerator):
     def __init__(self, photos_dir: Path, seed_file: Optional[Path] = None) -> None:
         self.photos_dir = Path(photos_dir)
         self.photos_dir.mkdir(parents=True, exist_ok=True)
-        self.seed_file = seed_file or self.photos_dir / "mock-source.png"
+        self.seed_file = seed_file or self.photos_dir / "placeholder.png"
         if not self.seed_file.exists():
             self._create_seed_file()
 
     def generate(self, profile: CandidateProfile) -> Path:
         logging.getLogger(__name__).info("Using mock image generator.")
-        destination = self.photos_dir / f"mock-{uuid4().hex[:8]}.png"
-        shutil.copy(self.seed_file, destination)
-        return destination
+        return self.seed_file
 
     def _create_seed_file(self) -> None:
         self.photos_dir.mkdir(parents=True, exist_ok=True)
@@ -327,17 +324,20 @@ class CVGenerator:
         output_dir: Path,
         text_generator: CVTextGenerator,
         image_generator: CandidateImageGenerator,
+        photo_keep_names: Optional[Set[str]] = None,
     ) -> None:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.text_generator = text_generator
         self.image_generator = image_generator
+        self._photo_keep_names = set(photo_keep_names or [])
 
     def generate(self) -> Path:
         logging.getLogger(__name__).info("Starting CV generation pipeline.")
         profile = self.text_generator.generate()
         profile.photo_path = self.image_generator.generate(profile)
         pdf_path = self._render_pdf(profile)
+        self._cleanup_photo(profile.photo_path)
         logging.getLogger(__name__).info("Generated CV at %s", pdf_path)
         return pdf_path
 
@@ -418,6 +418,19 @@ class CVGenerator:
         pdf.set_line_width(0.4)
         pdf.line(10, pdf.get_y(), 200, pdf.get_y())
         pdf.ln(2)
+
+    def _cleanup_photo(self, photo_path: Optional[Path]) -> None:
+        if not photo_path:
+            return
+        try:
+            photo_path = Path(photo_path)
+            if not photo_path.exists():
+                return
+            if photo_path.name in self._photo_keep_names:
+                return
+            photo_path.unlink()
+        except OSError:
+            logging.getLogger(__name__).warning("Failed to delete temp photo %s", photo_path)
 
     def _safe_text(self, value: Optional[str]) -> str:
         if not value:

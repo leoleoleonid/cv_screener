@@ -19,6 +19,15 @@ const App: React.FC = () => {
     'idle' | 'loading' | 'error' | 'success'
   >('idle');
   const [generateMessage, setGenerateMessage] = useState<string | null>(null);
+  const [ingestStatus, setIngestStatus] = useState<
+    'idle' | 'loading' | 'error' | 'success'
+  >('idle');
+  const [ingestMessage, setIngestMessage] = useState<string | null>(null);
+  const [cvTexts, setCvTexts] = useState<Record<string, string>>({});
+  const [cvTextsStatus, setCvTextsStatus] = useState<
+    'idle' | 'loading' | 'loaded' | 'error'
+  >('idle');
+  const [cvTextsError, setCvTextsError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('http://localhost:8000/health')
@@ -68,7 +77,16 @@ const App: React.FC = () => {
     })
       .then((res) => {
         if (!res.ok) {
-          throw new Error('Failed to send chat message');
+          return res
+            .json()
+            .catch(() => ({}))
+            .then((body) => {
+              const detail =
+                typeof body?.detail === 'string'
+                  ? body.detail
+                  : 'Failed to send chat message';
+              throw new Error(detail);
+            });
         }
         return res.json();
       })
@@ -105,6 +123,69 @@ const App: React.FC = () => {
       .catch((err) => {
         setGenerateStatus('error');
         setGenerateMessage(err.message);
+      });
+  };
+
+  const ingestRagIndex = () => {
+    setIngestStatus('loading');
+    setIngestMessage(null);
+    fetch('http://localhost:8000/rag/ingest', { method: 'POST' })
+      .then((res) => {
+        if (!res.ok) {
+          return res
+            .json()
+            .catch(() => ({}))
+            .then((body) => {
+              const detail =
+                typeof body?.detail === 'string'
+                  ? body.detail
+                  : 'Failed to ingest CVs';
+              throw new Error(detail);
+            });
+        }
+        return res.json();
+      })
+      .then((data) => {
+        const count =
+          typeof data?.documents === 'number' ? data.documents : undefined;
+        setIngestStatus('success');
+        setIngestMessage(
+          count !== undefined
+            ? `Ingested ${count} CV${count === 1 ? '' : 's'} into RAG index.`
+            : 'RAG index rebuilt.'
+        );
+      })
+      .catch((err) => {
+        setIngestStatus('error');
+        setIngestMessage(err.message);
+      });
+  };
+
+  const fetchCvTexts = () => {
+    setCvTextsStatus('loading');
+    setCvTextsError(null);
+    fetch('http://localhost:8000/cv-files/text')
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error('Failed to fetch CV texts');
+        }
+        return res.json();
+      })
+      .then((data) => {
+        const sanitized: Record<string, string> = {};
+        if (data && typeof data === 'object') {
+          Object.entries(data as Record<string, unknown>).forEach(
+            ([filename, value]) => {
+              sanitized[filename] = typeof value === 'string' ? value : '';
+            }
+          );
+        }
+        setCvTexts(sanitized);
+        setCvTextsStatus('loaded');
+      })
+      .catch((err) => {
+        setCvTextsStatus('error');
+        setCvTextsError(err.message);
       });
   };
 
@@ -180,6 +261,52 @@ const App: React.FC = () => {
               </li>
             ))}
           </ul>
+        )}
+      </div>
+      <div style={{ marginTop: '2rem' }}>
+        <h2>RAG Controls</h2>
+        <button onClick={ingestRagIndex} disabled={ingestStatus === 'loading'}>
+          {ingestStatus === 'loading' ? 'Ingesting…' : 'Ingest CV PDFs'}
+        </button>
+        {ingestMessage && (
+          <p
+            style={{
+              color: ingestStatus === 'error' ? 'red' : 'green',
+              marginTop: '0.5rem',
+            }}
+          >
+            {ingestMessage}
+          </p>
+        )}
+      </div>
+      <div style={{ marginTop: '2rem' }}>
+        <h2>CV Text Extraction</h2>
+        <button onClick={fetchCvTexts} disabled={cvTextsStatus === 'loading'}>
+          {cvTextsStatus === 'loading' ? 'Fetching…' : 'Get text from CV PDFs'}
+        </button>
+        {cvTextsStatus === 'error' && cvTextsError && (
+          <p style={{ color: 'red' }}>Error: {cvTextsError}</p>
+        )}
+        {cvTextsStatus === 'loaded' && Object.keys(cvTexts).length === 0 && (
+          <p>No PDF files with extractable text were found.</p>
+        )}
+        {Object.keys(cvTexts).length > 0 && (
+          <div style={{ marginTop: '1rem' }}>
+            {Object.entries(cvTexts).map(([filename, content]) => (
+              <details key={filename} style={{ marginBottom: '0.5rem' }}>
+                <summary>{filename}</summary>
+                <pre
+                  style={{
+                    whiteSpace: 'pre-wrap',
+                    background: '#f5f5f5',
+                    padding: '0.5rem',
+                  }}
+                >
+                  {content || '[No text extracted]'}
+                </pre>
+              </details>
+            ))}
+          </div>
         )}
       </div>
     </div>

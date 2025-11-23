@@ -27,23 +27,42 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 ROOT_DIR = BASE_DIR.parent
 load_dotenv(ROOT_DIR / ".env")
 
+
+def _resolve_dir(env_var: str, default_relative: str) -> Path:
+    """Ensure directories can be overridden via env while supporting relative paths."""
+    env_value = os.getenv(env_var)
+    if env_value:
+        candidate = Path(env_value)
+        if not candidate.is_absolute():
+            candidate = BASE_DIR / env_value
+    else:
+        candidate = BASE_DIR / default_relative
+    candidate.mkdir(parents=True, exist_ok=True)
+    return candidate
+
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-STATIC_DIR = BASE_DIR / "static"
-STATIC_DIR.mkdir(exist_ok=True)
+STATIC_DIR = _resolve_dir("STATIC_DIR", "static")
+RAG_INDEX_DIR = _resolve_dir("RAG_INDEX_DIR", "cv_faiss_index")
+PHOTOS_DIR = _resolve_dir("PHOTOS_DIR", "photos")
 
-rag_index_dir_env = os.getenv("RAG_INDEX_DIR")
-if rag_index_dir_env:
-    rag_index_path = Path(rag_index_dir_env)
-    if not rag_index_path.is_absolute():
-        rag_index_path = BASE_DIR / rag_index_dir_env
-else:
-    rag_index_path = BASE_DIR / "cv_faiss_index"
+tags_metadata = [
+    {"name": "Static Files", "description": "List and generate CV PDFs stored on disk."},
+    {"name": "CV Texts", "description": "Read extracted text from stored CV PDFs."},
+    {"name": "RAG", "description": "Ingest CV data and power chat responses via retrieval."},
+    {"name": "Chat", "description": "Ask questions answered through RAG context."},
+    {"name": "Health", "description": "Check backend status."},
+]
 
-RAG_INDEX_DIR = rag_index_path
-RAG_INDEX_DIR.mkdir(parents=True, exist_ok=True)
-
-app = FastAPI()
+app = FastAPI(
+    title="AI CV Screener API",
+    description="Endpoints for CV generation, PDF ingestion, and Gemini-powered RAG chat.",
+    version="1.0.0",
+    openapi_tags=tags_metadata,
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
 
 origins = [
     "http://localhost:3000",
@@ -61,7 +80,7 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
-@app.get("/static-files")
+@app.get("/static-files", tags=["Static Files"])
 def list_static_files():
     files = sorted(file.name for file in STATIC_DIR.glob("*.pdf") if file.is_file())
     return {"files": files}
@@ -70,9 +89,6 @@ def list_static_files():
 class ChatMessage(BaseModel):
     message: str
 
-
-photos_dir = STATIC_DIR / "photos"
-photos_dir.mkdir(parents=True, exist_ok=True)
 
 api_key = os.getenv("GOOGLE_GENAI_API_KEY", "")
 text_model_name = os.getenv("GOOGLE_GENAI_MODEL_NAME", "gemini-2.0-flash")
@@ -88,9 +104,9 @@ text_generator = (
 logger.info("Text generator configured: %s", text_generator.__class__.__name__)
 
 image_generator = (
-    MockImageGenerator(photos_dir=photos_dir)
+    MockImageGenerator(photos_dir=PHOTOS_DIR)
     if use_mock_image
-    else GeminiImageGenerator(api_key=api_key, model_name=image_model_name, photos_dir=photos_dir)
+    else GeminiImageGenerator(api_key=api_key, model_name=image_model_name, photos_dir=PHOTOS_DIR)
 )
 logger.info("Image generator configured: %s", image_generator.__class__.__name__)
 
@@ -98,6 +114,7 @@ cv_generator = CVGenerator(
     output_dir=STATIC_DIR,
     text_generator=text_generator,
     image_generator=image_generator,
+    photo_keep_names={"placeholder.png"},
 )
 
 cv_preprocessing_service = CVSPreprocessingService(static_dir=STATIC_DIR)
@@ -117,7 +134,7 @@ rag_service = RAGService(
 )
 
 
-@app.post("/chat")
+@app.post("/chat", tags=["Chat"])
 def chat(message: ChatMessage):
     question = message.message.strip()
     if not question:
@@ -135,13 +152,13 @@ def chat(message: ChatMessage):
         raise HTTPException(status_code=500, detail="Failed to generate chat response.")
 
 
-@app.post("/static-files/generate")
+@app.post("/static-files/generate", tags=["Static Files"])
 def generate_static_file():
     pdf_path = cv_generator.generate()
     return {"message": "Generated CV", "file": pdf_path.name}
 
 
-@app.get("/cv-files/text")
+@app.get("/cv-files/text", tags=["CV Texts"])
 def get_cv_file_texts():
     try:
         return cv_preprocessing_service.extract_texts()
@@ -150,7 +167,7 @@ def get_cv_file_texts():
         raise HTTPException(status_code=500, detail="Failed to read CV files")
 
 
-@app.post("/rag/ingest")
+@app.post("/rag/ingest", tags=["RAG"])
 def ingest_rag():
     try:
         ingested = rag_service.ingest()
@@ -165,6 +182,6 @@ def ingest_rag():
     return {"message": "RAG index rebuilt.", "documents": ingested}
 
 
-@app.get("/health")
+@app.get("/health", tags=["Health"])
 def health():
     return {"message": "Hello from FastAPI backend 👋"}
