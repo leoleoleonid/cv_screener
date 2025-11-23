@@ -6,6 +6,9 @@ services:
     container_name: ai-cv-backend
     ports:
       - "8000:8000"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     volumes:
       - ./backend/static:/app/static
       - ./backend/cv_faiss_index:/app/cv_faiss_index

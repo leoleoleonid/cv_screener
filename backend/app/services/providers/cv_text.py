@@ -80,21 +80,14 @@ class MockCVTextGenerator(CVTextGenerator):
 class GeminiCVTextGenerator(CVTextGenerator):
     """Gemini-powered profile generator with JSON schema enforcement."""
 
-    def __init__(
-        self,
-        api_key: str,
-        model_name: str,
-        fallback: Optional[MockCVTextGenerator] = None,
-    ) -> None:
+    def __init__(self, api_key: str, model_name: str) -> None:
         self._client = genai.Client(api_key=api_key) if api_key and model_name else None
         self._model_name = model_name
-        self._fallback = fallback or MockCVTextGenerator()
-        self._logger = logging.getLogger(__name__)
+        self._logger = logging.getLogger(self.__class__.__name__)
 
     def generate(self) -> CandidateProfile:
         if not self._client or not self._model_name:
-            self._logger.info("GeminiCVTextGenerator falling back to mock implementation.")
-            return self._fallback.generate()
+            raise RuntimeError("Gemini credentials are not configured; cannot generate CV.")
 
         config = genai_types.GenerateContentConfig(
             response_mime_type="application/json",
@@ -111,9 +104,10 @@ class GeminiCVTextGenerator(CVTextGenerator):
             payload = self._extract_json(response)
             if payload:
                 return self._profile_from_payload(payload)
-        except Exception:
-            self._logger.exception("Gemini text generation failed, falling back to mock.")
-        return self._fallback.generate()
+        except Exception as exc:  # pragma: no cover - network failures already logged
+            self._logger.exception("Gemini text generation failed.")
+            raise RuntimeError("Failed to generate CV via Gemini.") from exc
+        raise RuntimeError("Gemini returned empty payload for CV generation.")
 
     def _profile_from_payload(self, payload: Dict[str, object]) -> CandidateProfile:
         def _ensure_list(value: object) -> List:

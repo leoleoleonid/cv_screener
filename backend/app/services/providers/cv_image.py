@@ -37,19 +37,18 @@ class MockImageGenerator(CandidateImageGenerator):
 
 
 class GeminiImageGenerator(CandidateImageGenerator):
-    """Gemini-powered headshot generator with placeholder fallback."""
+    """Gemini-powered headshot generator."""
 
     def __init__(self, api_key: str, model_name: str, photos_dir: Path) -> None:
         self.photos_dir = Path(photos_dir)
         self.photos_dir.mkdir(parents=True, exist_ok=True)
         self.client = genai.Client(api_key=api_key) if api_key and model_name else None
-        self._logger = logging.getLogger(__name__)
+        self._logger = logging.getLogger(self.__class__.__name__)
         self.model_name = model_name
 
     def generate(self, profile: CandidateProfile) -> Path:
         if not self.client or not self.model_name:
-            self._logger.info("Gemini image generator missing client/model, using placeholder.")
-            return self._placeholder_photo(profile)
+            raise RuntimeError("Gemini credentials are not configured; cannot generate photo.")
 
         self._logger.info("Generating candidate photo via Gemini image model.")
         prompt = (
@@ -68,9 +67,10 @@ class GeminiImageGenerator(CandidateImageGenerator):
                     filename = self.photos_dir / f"photo-{uuid4().hex[:8]}.png"
                     image_obj.save(filename)
                     return filename
-        except Exception:
-            self._logger.exception("Gemini image generation failed, using placeholder.")
-        return self._placeholder_photo(profile)
+        except Exception as exc:
+            self._logger.exception("Gemini image generation failed.")
+            raise RuntimeError("Failed to generate photo via Gemini.") from exc
+        raise RuntimeError("Gemini returned no images for the request.")
 
     def _placeholder_photo(self, profile: CandidateProfile) -> Path:
         filename = self.photos_dir / f"placeholder-{uuid4().hex[:8]}.png"

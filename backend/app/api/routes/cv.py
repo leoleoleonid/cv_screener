@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.deps import (
     get_cv_generator,
@@ -20,7 +20,10 @@ def list_cvs(
 def generate_cv(
     generator: CVGeneratorService = Depends(get_cv_generator),
 ):
-    pdf_path = generator.generate()
+    try:
+        pdf_path = generator.generate()
+    except Exception as exc:  # pragma: no cover - propagated to API
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"message": "Generated CV", "file": pdf_path.name}
 
 
@@ -30,4 +33,3 @@ def generate_mock_cv(
 ):
     pdf_path = generator.generate()
     return {"message": "Generated mock CV", "file": pdf_path.name}
-
