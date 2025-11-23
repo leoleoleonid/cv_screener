@@ -1,37 +1,55 @@
 import logging
 import unicodedata
 from pathlib import Path
-from typing import Optional, Set
+from typing import Iterable, Optional, Protocol
 from uuid import uuid4
 
 from fpdf import FPDF
 
-from app.domain.cv.interfaces import CandidateImageGenerator, CVTextGenerator
-from app.domain.cv.models import CandidateProfile
+from app.models.cv import CandidateProfile
 
 
-class CVService:
+class CVTextGenerator(Protocol):
+    def generate(self) -> CandidateProfile:
+        ...
+
+
+class CandidateImageGenerator(Protocol):
+    def generate(self, profile: CandidateProfile) -> Optional[Path]:
+        ...
+
+
+class CVGeneratorService:
+    """High-level CV workflow used by HTTP handlers."""
+
     def __init__(
         self,
-        output_dir: Path,
+        storage_dir: Path,
         text_generator: CVTextGenerator,
         image_generator: CandidateImageGenerator,
-        photo_keep_names: Optional[Set[str]] = None,
+        photo_dir: Path,
+        photo_keep_names: Optional[Iterable[str]] = None,
     ) -> None:
-        self.output_dir = Path(output_dir)
+        self.output_dir = Path(storage_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.text_generator = text_generator
         self.image_generator = image_generator
+        self._photo_dir = Path(photo_dir)
+        self._photo_dir.mkdir(parents=True, exist_ok=True)
         self._photo_keep_names = set(photo_keep_names or [])
+        self._logger = logging.getLogger(self.__class__.__name__)
 
     def generate(self) -> Path:
-        logging.getLogger(__name__).info("Starting CV generation pipeline.")
+        self._logger.info("Starting CV generation pipeline.")
         profile = self.text_generator.generate()
         profile.photo_path = self.image_generator.generate(profile)
         pdf_path = self._render_pdf(profile)
         self._cleanup_photo(profile.photo_path)
-        logging.getLogger(__name__).info("Generated CV at %s", pdf_path)
+        self._logger.info("Generated CV at %s", pdf_path)
         return pdf_path
+
+    def list_pdf_files(self) -> list[str]:
+        return sorted(path.name for path in self.output_dir.glob("*.pdf"))
 
     def _render_pdf(self, profile: CandidateProfile) -> Path:
         filename = f"{profile.name.replace(' ', '_')}-{uuid4().hex[:8]}.pdf"
@@ -122,7 +140,7 @@ class CVService:
                 return
             photo_path.unlink()
         except OSError:
-            logging.getLogger(__name__).warning("Failed to delete temp photo %s", photo_path)
+            self._logger.warning("Failed to delete temp photo %s", photo_path)
 
     def _safe_text(self, value: Optional[str]) -> str:
         if not value:

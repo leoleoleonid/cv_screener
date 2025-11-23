@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 from pathlib import Path
@@ -13,8 +14,37 @@ from langchain_google_genai import (
     ChatGoogleGenerativeAI,
     GoogleGenerativeAIEmbeddings,
 )
+from PyPDF2 import PdfReader
 
-from app.services.cvs_preprocessing_service import CVSPreprocessingService
+
+class CVTextExtractor:
+    """Extracts text from PDF CV files stored in a static directory."""
+
+    def __init__(self, static_dir: Path) -> None:
+        self._static_dir = static_dir
+        self._logger = logging.getLogger(self.__class__.__name__)
+
+    def extract_texts(self) -> Dict[str, str]:
+        texts: Dict[str, str] = {}
+        for pdf_path in sorted(self._static_dir.glob("*.pdf")):
+            if not pdf_path.is_file():
+                continue
+            texts[pdf_path.name] = self._extract_pdf_text(pdf_path)
+        return texts
+
+    def _extract_pdf_text(self, pdf_path: Path) -> str:
+        try:
+            with pdf_path.open("rb") as file_obj:
+                reader = PdfReader(file_obj)
+                chunks = []
+                for page in reader.pages:
+                    text = page.extract_text() or ""
+                    if text:
+                        chunks.append(text.strip())
+                return "\n\n".join(chunks).strip()
+        except Exception:
+            self._logger.exception("Failed to extract text from %s", pdf_path)
+            return ""
 
 
 class RAGServiceError(Exception):
@@ -38,18 +68,25 @@ class RAGService:
 
     def __init__(
         self,
-        cv_service: CVSPreprocessingService,
+        text_extractor: CVTextExtractor,
         index_dir: Path,
         embedding_model: str,
         chat_model: str,
         google_api_key: Optional[str],
+        chunk_size: int,
+        chunk_overlap: int,
+        retriever_k: int,
     ) -> None:
-        self._cv_service = cv_service
+        self._text_extractor = text_extractor
         self._index_dir = index_dir
         self._embedding_model = embedding_model
         self._chat_model = chat_model
         self._api_key = google_api_key or ""
         self._rag_chain = None
+        self._chunk_size = chunk_size
+        self._chunk_overlap = chunk_overlap
+        self._retriever_k = retriever_k
+        self._logger = logging.getLogger(self.__class__.__name__)
 
         if self._api_key and not os.getenv("GOOGLE_API_KEY"):
             os.environ["GOOGLE_API_KEY"] = self._api_key
@@ -57,15 +94,15 @@ class RAGService:
     def ingest(self) -> int:
         """Rebuild FAISS index from CV PDFs, returning number of CVs ingested."""
         self._ensure_api_key()
-        cv_texts = self._cv_service.extract_texts()
+        cv_texts = self._text_extractor.extract_texts()
 
         documents = self._build_documents(cv_texts)
         if not documents:
             raise RAGEmptyCorpusError("No CV texts found to ingest.")
 
         splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
+            chunk_size=self._chunk_size,
+            chunk_overlap=self._chunk_overlap,
             separators=["\n\n", "\n", ".", " "],
         )
         chunks = splitter.split_documents(documents)
@@ -143,7 +180,7 @@ User question:
             embeddings,
             allow_dangerous_deserialization=True,
         )
-        return vectorstore.as_retriever(search_kwargs={"k": 4})
+        return vectorstore.as_retriever(search_kwargs={"k": self._retriever_k})
 
     def _build_documents(self, cv_texts: Dict[str, str]) -> List[Document]:
         documents: List[Document] = []

@@ -1,16 +1,44 @@
 import logging
 from pathlib import Path
+from typing import Optional
 from uuid import uuid4
 
 from google import genai
 from google.genai import types as genai_types
 from PIL import Image, ImageDraw
 
-from app.domain.cv.interfaces import CandidateImageGenerator
-from app.domain.cv.models import CandidateProfile
+from app.models.cv import CandidateProfile
+from app.services.cv_generator import CandidateImageGenerator
+
+
+class MockImageGenerator(CandidateImageGenerator):
+    """Local placeholder image provider used for development and tests."""
+
+    def __init__(self, photos_dir: Path, seed_file: Optional[Path] = None) -> None:
+        self.photos_dir = Path(photos_dir)
+        self.photos_dir.mkdir(parents=True, exist_ok=True)
+        self.seed_file = seed_file or self.photos_dir / "placeholder.png"
+        if not self.seed_file.exists():
+            self._create_seed_file()
+        self._logger = logging.getLogger(self.__class__.__name__)
+
+    def generate(self, profile: CandidateProfile) -> Path:
+        self._logger.info("Using mock image generator.")
+        return self.seed_file
+
+    def _create_seed_file(self) -> None:
+        self.photos_dir.mkdir(parents=True, exist_ok=True)
+        image = Image.new("RGB", (512, 512), color=(70, 90, 140))
+        draw = ImageDraw.Draw(image)
+        draw.ellipse((110, 60, 402, 452), fill=(205, 170, 140))
+        draw.rectangle((80, 360, 432, 520), fill=(40, 60, 110))
+        draw.text((180, 230), "Mock", fill=(255, 255, 255))
+        image.save(self.seed_file)
 
 
 class GeminiImageGenerator(CandidateImageGenerator):
+    """Gemini-powered headshot generator with placeholder fallback."""
+
     def __init__(self, api_key: str, model_name: str, photos_dir: Path) -> None:
         self.photos_dir = Path(photos_dir)
         self.photos_dir.mkdir(parents=True, exist_ok=True)

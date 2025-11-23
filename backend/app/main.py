@@ -5,8 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import chat, cv, health, rag
-from app.config import Settings
-from app.dependencies import get_settings
+from app.core.config import Settings
+from app.core.deps import get_settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

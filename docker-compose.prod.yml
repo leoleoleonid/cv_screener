@@ -11,16 +11,16 @@ services:
       - ./backend/cv_faiss_index:/app/cv_faiss_index
       - ./backend/photos:/app/photos
     env_file:
-      - .env
+      - ./backend/.env
     restart: unless-stopped
 
   frontend:
     build:
       context: .
-      dockerfile: frontend/Dockerfile
+      dockerfile: frontend/Dockerfile.prod
     container_name: ai-cv-frontend
     ports:
-      - "3000:3000"
+      - "3000:80"
     depends_on:
       - backend
     restart: unless-stopped

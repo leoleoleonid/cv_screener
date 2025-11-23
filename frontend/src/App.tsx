@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import './App.css';
 
 const App: React.FC = () => {
-  const [text, setText] = useState<string>('Loading...');
+  const [backendStatus, setBackendStatus] = useState<string>('Checking backend…');
   const [files, setFiles] = useState<string[]>([]);
   const [filesStatus, setFilesStatus] = useState<
     'idle' | 'loading' | 'loaded' | 'error'
@@ -29,17 +30,16 @@ const App: React.FC = () => {
     'idle' | 'loading' | 'error' | 'success'
   >('idle');
   const [ingestMessage, setIngestMessage] = useState<string | null>(null);
-  const [cvTexts, setCvTexts] = useState<Record<string, string>>({});
-  const [cvTextsStatus, setCvTextsStatus] = useState<
-    'idle' | 'loading' | 'loaded' | 'error'
-  >('idle');
-  const [cvTextsError, setCvTextsError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('http://localhost:8000/health')
       .then((res) => res.json())
-      .then((data) => setText(data.message))
-      .catch((err) => setText('Error: ' + err.message));
+      .then((data) => setBackendStatus(data.message ?? 'Backend online'))
+      .catch((err) => setBackendStatus('Backend unavailable: ' + err.message));
+  }, []);
+
+  useEffect(() => {
+    fetchCvFiles();
   }, []);
 
   const fetchCvFiles = () => {
@@ -190,174 +190,161 @@ const App: React.FC = () => {
       });
   };
 
-  const fetchCvTexts = () => {
-    setCvTextsStatus('loading');
-    setCvTextsError(null);
-    fetch('http://localhost:8000/cv/texts')
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error('Failed to fetch CV texts');
-        }
-        return res.json();
-      })
-      .then((data) => {
-        const sanitized: Record<string, string> = {};
-        if (data && typeof data === 'object') {
-          Object.entries(data as Record<string, unknown>).forEach(
-            ([filename, value]) => {
-              sanitized[filename] = typeof value === 'string' ? value : '';
-            }
-          );
-        }
-        setCvTexts(sanitized);
-        setCvTextsStatus('loaded');
-      })
-      .catch((err) => {
-        setCvTextsStatus('error');
-        setCvTextsError(err.message);
-      });
-  };
-
   return (
-    <div style={{ fontFamily: 'sans-serif', padding: '2rem' }}>
-      <h1>AI CV Screener – Smoke Test</h1>
-      <p>Backend says:</p>
-      <pre>{text}</pre>
-      <div style={{ marginTop: '2rem' }}>
-        <button onClick={fetchCvFiles} disabled={filesStatus === 'loading'}>
-          {filesStatus === 'loading' ? 'Loading…' : 'Load CV files'}
-        </button>
-        {filesStatus === 'error' && filesError && (
-          <p style={{ color: 'red' }}>Error: {filesError}</p>
-        )}
-        {filesStatus === 'loaded' && files.length === 0 && (
-          <p>No static files were found.</p>
-        )}
-        {files.length > 0 && (
-          <ul>
-            {files.map((file) => (
-              <li key={file}>
-                <a
-                  href={`http://localhost:8000/static/${encodeURIComponent(file)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {file}
-                </a>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div style={{ marginTop: '1rem' }}>
-          <button onClick={generateCvFile} disabled={generateStatus === 'loading'}>
-            {generateStatus === 'loading' ? 'Generating…' : 'Generate new CV'}
-          </button>
-          {generateMessage && (
-            <p
-              style={{
-                color: generateStatus === 'error' ? 'red' : 'green',
-                marginTop: '0.5rem',
-              }}
-            >
-              {generateMessage}
-            </p>
-          )}
-        </div>
-        <div style={{ marginTop: '0.5rem' }}>
+    <div className="app-shell">
+      <header className="app-hero">
+        <p className="hero-pill">AI CV Screener</p>
+        <h1>Generate polished CVs & chat with your candidate corpus</h1>
+        <p className="hero-subtitle">
+          {backendStatus || 'Backend status unavailable'}
+        </p>
+        <div className="hero-actions">
           <button
+            className="btn btn-primary"
+            onClick={generateCvFile}
+            disabled={generateStatus === 'loading'}
+          >
+            {generateStatus === 'loading' ? 'Generating…' : 'Generate CV'}
+          </button>
+          <button
+            className="btn btn-secondary"
             onClick={generateMockCvFile}
             disabled={mockGenerateStatus === 'loading'}
           >
-            {mockGenerateStatus === 'loading'
-              ? 'Generating mock…'
-              : 'Generate mock CV'}
+            {mockGenerateStatus === 'loading' ? 'Mocking…' : 'Mock CV'}
           </button>
-          {mockGenerateMessage && (
-            <p
-              style={{
-                color: mockGenerateStatus === 'error' ? 'red' : 'green',
-                marginTop: '0.5rem',
-              }}
-            >
-              {mockGenerateMessage}
-            </p>
-          )}
         </div>
-      </div>
-      <div style={{ marginTop: '2rem' }}>
-        <h2>Chat Demo</h2>
-        <form onSubmit={handleChatSubmit} style={{ marginBottom: '1rem' }}>
-          <input
-            type="text"
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            placeholder="Type your message"
-            style={{ width: '60%', marginRight: '0.5rem' }}
-          />
-          <button type="submit" disabled={chatStatus === 'sending'}>
-            {chatStatus === 'sending' ? 'Sending…' : 'Send'}
-          </button>
-        </form>
-        {chatError && <p style={{ color: 'red' }}>Error: {chatError}</p>}
-        {chatHistory.length === 0 ? (
-          <p>No messages yet.</p>
-        ) : (
-          <ul>
-            {chatHistory.map((entry, index) => (
-              <li key={`${entry.role}-${index}`}>
-                <strong>{entry.role === 'user' ? 'You' : 'Assistant'}:</strong>{' '}
-                {entry.text}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      <div style={{ marginTop: '2rem' }}>
-        <h2>RAG Controls</h2>
-        <button onClick={ingestRagIndex} disabled={ingestStatus === 'loading'}>
-          {ingestStatus === 'loading' ? 'Ingesting…' : 'Ingest CV PDFs'}
-        </button>
-        {ingestMessage && (
-          <p
-            style={{
-              color: ingestStatus === 'error' ? 'red' : 'green',
-              marginTop: '0.5rem',
-            }}
-          >
-            {ingestMessage}
-          </p>
-        )}
-      </div>
-      <div style={{ marginTop: '2rem' }}>
-        <h2>CV Text Extraction</h2>
-        <button onClick={fetchCvTexts} disabled={cvTextsStatus === 'loading'}>
-          {cvTextsStatus === 'loading' ? 'Fetching…' : 'Get text from CV PDFs'}
-        </button>
-        {cvTextsStatus === 'error' && cvTextsError && (
-          <p style={{ color: 'red' }}>Error: {cvTextsError}</p>
-        )}
-        {cvTextsStatus === 'loaded' && Object.keys(cvTexts).length === 0 && (
-          <p>No PDF files with extractable text were found.</p>
-        )}
-        {Object.keys(cvTexts).length > 0 && (
-          <div style={{ marginTop: '1rem' }}>
-            {Object.entries(cvTexts).map(([filename, content]) => (
-              <details key={filename} style={{ marginBottom: '0.5rem' }}>
-                <summary>{filename}</summary>
-                <pre
-                  style={{
-                    whiteSpace: 'pre-wrap',
-                    background: '#f5f5f5',
-                    padding: '0.5rem',
-                  }}
-                >
-                  {content || '[No text extracted]'}
-                </pre>
-              </details>
-            ))}
+        {(generateMessage || mockGenerateMessage) && (
+          <div className="hero-feedback">
+            {generateMessage && (
+              <span
+                className={`status-text ${
+                  generateStatus === 'error' ? 'error' : 'success'
+                }`}
+              >
+                {generateMessage}
+              </span>
+            )}
+            {mockGenerateMessage && (
+              <span
+                className={`status-text ${
+                  mockGenerateStatus === 'error' ? 'error' : 'success'
+                }`}
+              >
+                {mockGenerateMessage}
+              </span>
+            )}
           </div>
         )}
-      </div>
+      </header>
+
+      <main className="content-stack">
+        <div className="chat-stack">
+          <section className="card rag-card">
+            <div>
+              <p className="rag-label">RAG Maintenance</p>
+              <p className="rag-description">
+                Rebuild the FAISS index when CVs change so chat stays in sync.
+              </p>
+            </div>
+            <div className="rag-actions">
+              <button
+                className="btn btn-secondary"
+                onClick={ingestRagIndex}
+                disabled={ingestStatus === 'loading'}
+              >
+                {ingestStatus === 'loading' ? 'Ingesting…' : 'Ingest CV PDFs'}
+              </button>
+              {ingestMessage && (
+                <span
+                  className={`status-text ${
+                    ingestStatus === 'error' ? 'error' : 'success'
+                  }`}
+                >
+                  {ingestMessage}
+                </span>
+              )}
+            </div>
+          </section>
+
+          <section className="card chat-card">
+            <div className="card-header">
+              <h2>Chat with RAG</h2>
+              <p>Ask questions answered using the indexed CV corpus.</p>
+            </div>
+            <form className="chat-form" onSubmit={handleChatSubmit}>
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Ask about skills, experience, availability…"
+              />
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={chatStatus === 'sending'}
+              >
+                {chatStatus === 'sending' ? 'Sending…' : 'Send'}
+              </button>
+            </form>
+            {chatError && <span className="status-text error">{chatError}</span>}
+            <div className="chat-history">
+              {chatHistory.length === 0 ? (
+                <p className="status-text muted">No messages yet.</p>
+              ) : (
+                chatHistory.map((entry, index) => (
+                  <div
+                    key={`${entry.role}-${index}`}
+                    className={`chat-message ${entry.role}`}
+                  >
+                    <strong>{entry.role === 'user' ? 'You' : 'Assistant'}</strong>
+                    <p>{entry.text}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
+
+        <section className="card cv-card">
+          <div className="card-header">
+            <h2>CV Library</h2>
+            <p>Browse generated PDFs and open them directly from storage.</p>
+          </div>
+          <div className="card-actions">
+            <button
+              className="btn btn-ghost"
+              onClick={fetchCvFiles}
+              disabled={filesStatus === 'loading'}
+            >
+              {filesStatus === 'loading' ? 'Refreshing…' : 'Refresh list'}
+            </button>
+            {filesStatus === 'error' && filesError && (
+              <span className="status-text error">{filesError}</span>
+            )}
+            {filesStatus === 'loaded' && files.length === 0 && (
+              <span className="status-text muted">
+                No static CVs were found. Generate one above.
+              </span>
+            )}
+          </div>
+          {files.length > 0 && (
+            <ul className="file-grid">
+              {files.map((file) => (
+                <li key={file}>
+                  <a
+                    href={`http://localhost:8000/static/${encodeURIComponent(file)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {file}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </main>
     </div>
   );
 };

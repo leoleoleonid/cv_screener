@@ -1,47 +1,33 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
-from app.dependencies import (
-    get_cv_texts_use_case,
-    get_generate_cv_use_case,
-    get_generate_mock_cv_use_case,
-    get_list_static_files_use_case,
+from app.core.deps import (
+    get_cv_generator,
+    get_mock_cv_generator,
 )
-from app.use_cases.generate_cv import GenerateCvUseCase
-from app.use_cases.generate_mock_cv import GenerateMockCvUseCase
-from app.use_cases.get_cv_texts import GetCvTextsUseCase
-from app.use_cases.list_static_files import ListStaticFilesUseCase
+from app.services.cv_generator import CVGeneratorService
 
 router = APIRouter(prefix="/cv", tags=["CV"])
 
 
 @router.get("")
 def list_cvs(
-    use_case: ListStaticFilesUseCase = Depends(get_list_static_files_use_case),
+    generator: CVGeneratorService = Depends(get_cv_generator),
 ):
-    return {"files": use_case.execute()}
+    return {"files": generator.list_pdf_files()}
 
 
 @router.post("/generate")
 def generate_cv(
-    use_case: GenerateCvUseCase = Depends(get_generate_cv_use_case),
+    generator: CVGeneratorService = Depends(get_cv_generator),
 ):
-    pdf_path = use_case.execute()
+    pdf_path = generator.generate()
     return {"message": "Generated CV", "file": pdf_path.name}
 
 
 @router.post("/generate-mock")
 def generate_mock_cv(
-    use_case: GenerateMockCvUseCase = Depends(get_generate_mock_cv_use_case),
+    generator: CVGeneratorService = Depends(get_mock_cv_generator),
 ):
-    pdf_path = use_case.execute()
+    pdf_path = generator.generate()
     return {"message": "Generated mock CV", "file": pdf_path.name}
 
-
-@router.get("/texts")
-def get_cv_texts(
-    use_case: GetCvTextsUseCase = Depends(get_cv_texts_use_case),
-):
-    try:
-        return use_case.execute()
-    except Exception as exc:  # pragma: no cover - defensive
-        raise HTTPException(status_code=500, detail="Failed to read CV files") from exc

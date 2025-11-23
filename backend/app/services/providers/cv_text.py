@@ -1,21 +1,90 @@
 import json
 import logging
+import random
 from typing import Dict, List, Optional
 
 from google import genai
 from google.genai import types as genai_types
 
-from app.domain.cv.interfaces import CVTextGenerator
-from app.domain.cv.models import CandidateProfile
-from app.infrastructure.cv.text.mock_provider import MockCVTextGenerator
+from app.models.cv import CandidateProfile
+from app.services.cv_generator import CVTextGenerator
+
+
+class MockCVTextGenerator(CVTextGenerator):
+    """Deterministic-ish fallback profile generator used in dev and tests."""
+
+    def __init__(self) -> None:
+        self._random = random.Random()
+
+    def generate(self) -> CandidateProfile:
+        first_names = ["Avery", "Kai", "Morgan", "Sage", "River"]
+        last_names = ["Singh", "Garcia", "Turner", "Patel", "Davis"]
+        roles = [
+            "Machine Learning Engineer",
+            "Frontend Engineer",
+            "Product Manager",
+            "AI Researcher",
+            "Security Analyst",
+        ]
+        locations = ["Berlin, Germany", "Austin, TX", "Toronto, Canada", "Remote"]
+
+        name = f"{self._random.choice(first_names)} {self._random.choice(last_names)}"
+        role = self._random.choice(roles)
+        skills = [
+            "Python",
+            "TypeScript",
+            "Prompt Engineering",
+            "Generative AI",
+            "Kubernetes",
+            "LLM Fine-tuning",
+        ]
+
+        return CandidateProfile(
+            name=name,
+            title=role,
+            summary=(
+                f"{name} is a {role} with a strong record of shipping AI-powered products "
+                "and mentoring cross-functional teams."
+            ),
+            contact={
+                "email": f"{name.replace(' ', '.').lower()}@example.com",
+                "phone": "+1 (555) 555-1212",
+                "location": self._random.choice(locations),
+            },
+            experience=[
+                {
+                    "company": "NovaTech Labs",
+                    "role": role,
+                    "duration": "2021 - Present",
+                    "achievements": "Leads delivery of intelligent features that increased adoption by 30%.",
+                },
+                {
+                    "company": "Quantum Solutions",
+                    "role": f"Senior {role}",
+                    "duration": "2018 - 2021",
+                    "achievements": "Introduced experimentation practices that cut cycle time by 20%.",
+                },
+            ],
+            education=[
+                {
+                    "institution": "Metropolitan Institute of Technology",
+                    "degree": "MSc Computer Science",
+                    "graduation_year": 2018,
+                }
+            ],
+            skills=skills,
+            languages=["English", "German"],
+        )
 
 
 class GeminiCVTextGenerator(CVTextGenerator):
+    """Gemini-powered profile generator with JSON schema enforcement."""
+
     def __init__(
         self,
         api_key: str,
         model_name: str,
-        fallback: Optional[CVTextGenerator] = None,
+        fallback: Optional[MockCVTextGenerator] = None,
     ) -> None:
         self._client = genai.Client(api_key=api_key) if api_key and model_name else None
         self._model_name = model_name
@@ -55,42 +124,53 @@ class GeminiCVTextGenerator(CVTextGenerator):
             return [value]
 
         contact = payload.get("contact") if isinstance(payload.get("contact"), dict) else {}
-        experience = [item for item in _ensure_list(payload.get("experience")) if isinstance(item, dict)]
-        education = [item for item in _ensure_list(payload.get("education")) if isinstance(item, dict)]
-        skills = [str(skill) for skill in _ensure_list(payload.get("skills"))]
-        languages = [str(lang) for lang in _ensure_list(payload.get("languages"))]
+        experience = []
+        for item in _ensure_list(payload.get("experience")):
+            if not isinstance(item, dict):
+                continue
+            clean = {key: str(value).strip() for key, value in item.items() if value}
+            if clean:
+                experience.append(clean)
+
+        education = []
+        for item in _ensure_list(payload.get("education")):
+            if not isinstance(item, dict):
+                continue
+            clean = {key: str(value).strip() for key, value in item.items() if value}
+            if clean:
+                education.append(clean)
+
+        skills = [
+            str(skill).strip()
+            for skill in _ensure_list(payload.get("skills"))
+            if str(skill).strip()
+        ]
+        languages = [
+            str(lang).strip()
+            for lang in _ensure_list(payload.get("languages"))
+            if str(lang).strip()
+        ]
+
+        name = str(payload.get("name") or "").strip()
+        title = str(payload.get("title") or "").strip()
+        summary = str(payload.get("summary") or "").strip()
+
+        if not name or not title:
+            raise ValueError("Candidate profile missing required fields.")
 
         return CandidateProfile(
-            name=str(payload.get("name", "Jordan Doe")),
-            title=str(payload.get("title", "AI Specialist")),
-            summary=str(
-                payload.get(
-                    "summary",
-                    "Seasoned professional experienced in AI product delivery.",
-                )
-            ),
+            name=name,
+            title=title,
+            summary=summary,
             contact={
-                "email": str(contact.get("email", "jordan.doe@example.com")),
-                "phone": str(contact.get("phone", "+1 (555) 000-0000")),
-                "location": str(contact.get("location", "Remote")),
+                "email": str(contact.get("email", "") or "").strip(),
+                "phone": str(contact.get("phone", "") or "").strip(),
+                "location": str(contact.get("location", "") or "").strip(),
             },
-            experience=experience or [
-                {
-                    "company": "NovaTech Labs",
-                    "role": "AI Specialist",
-                    "duration": "2020 - Present",
-                    "achievements": "Delivered automation with measurable business outcomes.",
-                }
-            ],
-            education=education or [
-                {
-                    "institution": "Metropolitan Institute of Technology",
-                    "degree": "MSc Computer Science",
-                    "graduation_year": 2018,
-                }
-            ],
-            skills=skills or ["Python", "Prompt Engineering"],
-            languages=languages or ["English"],
+            experience=experience,
+            education=education,
+            skills=skills,
+            languages=languages,
         )
 
     def _prompt(self) -> str:
