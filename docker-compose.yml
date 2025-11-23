@@ -7,6 +7,7 @@ services:
     network_mode: host
     volumes:
       - ./backend/static:/app/static
+      - ./backend/cv_faiss_index:/app/cv_faiss_index
     env_file:
       - .env
     restart: unless-stopped
