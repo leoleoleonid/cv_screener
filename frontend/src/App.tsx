@@ -19,6 +19,12 @@ const App: React.FC = () => {
     'idle' | 'loading' | 'error' | 'success'
   >('idle');
   const [generateMessage, setGenerateMessage] = useState<string | null>(null);
+  const [mockGenerateStatus, setMockGenerateStatus] = useState<
+    'idle' | 'loading' | 'error' | 'success'
+  >('idle');
+  const [mockGenerateMessage, setMockGenerateMessage] = useState<string | null>(
+    null
+  );
   const [ingestStatus, setIngestStatus] = useState<
     'idle' | 'loading' | 'error' | 'success'
   >('idle');
@@ -36,13 +42,13 @@ const App: React.FC = () => {
       .catch((err) => setText('Error: ' + err.message));
   }, []);
 
-  const fetchStaticFiles = () => {
+  const fetchCvFiles = () => {
     setFilesStatus('loading');
     setFilesError(null);
-    fetch('http://localhost:8000/static-files')
+    fetch('http://localhost:8000/cv')
       .then((res) => {
         if (!res.ok) {
-          throw new Error('Failed to load static files');
+          throw new Error('Failed to load CV files');
         }
         return res.json();
       })
@@ -103,26 +109,49 @@ const App: React.FC = () => {
       });
   };
 
-  const generateStaticFile = () => {
+  const generateCvFile = () => {
     setGenerateStatus('loading');
     setGenerateMessage(null);
-    fetch('http://localhost:8000/static-files/generate', {
+    fetch('http://localhost:8000/cv/generate', {
       method: 'POST',
     })
       .then((res) => {
         if (!res.ok) {
-          throw new Error('Failed to generate file');
+          throw new Error('Failed to generate CV');
         }
         return res.json();
       })
       .then((data) => {
         setGenerateStatus('success');
-        setGenerateMessage(data.message ?? 'Generated new file');
-        fetchStaticFiles();
+        setGenerateMessage(data.message ?? 'Generated new CV');
+        fetchCvFiles();
       })
       .catch((err) => {
         setGenerateStatus('error');
         setGenerateMessage(err.message);
+      });
+  };
+
+  const generateMockCvFile = () => {
+    setMockGenerateStatus('loading');
+    setMockGenerateMessage(null);
+    fetch('http://localhost:8000/cv/generate-mock', {
+      method: 'POST',
+    })
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error('Failed to generate mock CV');
+        }
+        return res.json();
+      })
+      .then((data) => {
+        setMockGenerateStatus('success');
+        setMockGenerateMessage(data.message ?? 'Generated mock CV');
+        fetchCvFiles();
+      })
+      .catch((err) => {
+        setMockGenerateStatus('error');
+        setMockGenerateMessage(err.message);
       });
   };
 
@@ -164,7 +193,7 @@ const App: React.FC = () => {
   const fetchCvTexts = () => {
     setCvTextsStatus('loading');
     setCvTextsError(null);
-    fetch('http://localhost:8000/cv-files/text')
+    fetch('http://localhost:8000/cv/texts')
       .then((res) => {
         if (!res.ok) {
           throw new Error('Failed to fetch CV texts');
@@ -195,8 +224,8 @@ const App: React.FC = () => {
       <p>Backend says:</p>
       <pre>{text}</pre>
       <div style={{ marginTop: '2rem' }}>
-        <button onClick={fetchStaticFiles} disabled={filesStatus === 'loading'}>
-          {filesStatus === 'loading' ? 'Loading…' : 'Load static files'}
+        <button onClick={fetchCvFiles} disabled={filesStatus === 'loading'}>
+          {filesStatus === 'loading' ? 'Loading…' : 'Load CV files'}
         </button>
         {filesStatus === 'error' && filesError && (
           <p style={{ color: 'red' }}>Error: {filesError}</p>
@@ -220,8 +249,8 @@ const App: React.FC = () => {
           </ul>
         )}
         <div style={{ marginTop: '1rem' }}>
-          <button onClick={generateStaticFile} disabled={generateStatus === 'loading'}>
-            {generateStatus === 'loading' ? 'Generating…' : 'Generate new PDF'}
+          <button onClick={generateCvFile} disabled={generateStatus === 'loading'}>
+            {generateStatus === 'loading' ? 'Generating…' : 'Generate new CV'}
           </button>
           {generateMessage && (
             <p
@@ -231,6 +260,26 @@ const App: React.FC = () => {
               }}
             >
               {generateMessage}
+            </p>
+          )}
+        </div>
+        <div style={{ marginTop: '0.5rem' }}>
+          <button
+            onClick={generateMockCvFile}
+            disabled={mockGenerateStatus === 'loading'}
+          >
+            {mockGenerateStatus === 'loading'
+              ? 'Generating mock…'
+              : 'Generate mock CV'}
+          </button>
+          {mockGenerateMessage && (
+            <p
+              style={{
+                color: mockGenerateStatus === 'error' ? 'red' : 'green',
+                marginTop: '0.5rem',
+              }}
+            >
+              {mockGenerateMessage}
             </p>
           )}
         </div>
