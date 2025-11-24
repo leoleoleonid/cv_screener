@@ -30,6 +30,7 @@ class MockCVTextGenerator(CVTextGenerator):
 
         name = f"{self._random.choice(first_names)} {self._random.choice(last_names)}"
         role = self._random.choice(roles)
+        genders = ["female", "male", "non-binary"]
         skills = [
             "Python",
             "TypeScript",
@@ -74,6 +75,7 @@ class MockCVTextGenerator(CVTextGenerator):
             ],
             skills=skills,
             languages=["English", "German"],
+            gender=self._random.choice(genders),
         )
 
 
@@ -144,7 +146,7 @@ class GeminiCVTextGenerator(CVTextGenerator):
             for lang in _ensure_list(payload.get("languages"))
             if str(lang).strip()
         ]
-
+        gender = str(payload.get("gender") or "").strip() or None
         name = str(payload.get("name") or "").strip()
         title = str(payload.get("title") or "").strip()
         summary = str(payload.get("summary") or "").strip()
@@ -165,12 +167,14 @@ class GeminiCVTextGenerator(CVTextGenerator):
             education=education,
             skills=skills,
             languages=languages,
+            gender=gender,
         )
 
     def _prompt(self) -> str:
         return (
-            "You are a CV-writing assistant. Produce a single JSON object "
-            "containing all the details for a skilled professional candidate."
+            "You are a CV-writing assistant. Produce a single JSON object describing a realistic candidate. "
+            "Vary names, job titles, industries, and seniority levels so successive CVs feel different. "
+            "Include a gender value inferred from the name (female, male, non-binary)."
         )
 
     def _get_schema(self) -> genai_types.Schema:
@@ -219,6 +223,7 @@ class GeminiCVTextGenerator(CVTextGenerator):
                     type=genai_types.Type.ARRAY,
                     items=genai_types.Schema(type=genai_types.Type.STRING),
                 ),
+                "gender": genai_types.Schema(type=genai_types.Type.STRING),
             },
         )
 

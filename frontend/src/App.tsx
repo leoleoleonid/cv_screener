@@ -1,5 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import './App.css';
+import { HeroSection } from './components/HeroSection';
+import { RagControls } from './components/RagControls';
+import { ChatPanel } from './components/ChatPanel';
+import { CvLibrary } from './components/CvLibrary';
+import { apiGet, apiPost } from './lib/api';
 
 const App: React.FC = () => {
   const [backendStatus, setBackendStatus] = useState<string>('Checking backend…');
@@ -32,8 +37,7 @@ const App: React.FC = () => {
   const [ingestMessage, setIngestMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('http://localhost:8000/health')
-      .then((res) => res.json())
+    apiGet<{ message?: string }>('/health')
       .then((data) => setBackendStatus(data.message ?? 'Backend online'))
       .catch((err) => setBackendStatus('Backend unavailable: ' + err.message));
   }, []);
@@ -45,13 +49,7 @@ const App: React.FC = () => {
   const fetchCvFiles = () => {
     setFilesStatus('loading');
     setFilesError(null);
-    fetch('http://localhost:8000/cv')
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error('Failed to load CV files');
-        }
-        return res.json();
-      })
+    apiGet<{ files?: string[] }>('/cv')
       .then((data) => {
         setFiles(data.files ?? []);
         setFilesStatus('loaded');
@@ -74,28 +72,7 @@ const App: React.FC = () => {
     setChatStatus('sending');
     setChatError(null);
 
-    fetch('http://localhost:8000/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ message: userMessage }),
-    })
-      .then((res) => {
-        if (!res.ok) {
-          return res
-            .json()
-            .catch(() => ({}))
-            .then((body) => {
-              const detail =
-                typeof body?.detail === 'string'
-                  ? body.detail
-                  : 'Failed to send chat message';
-              throw new Error(detail);
-            });
-        }
-        return res.json();
-      })
+    apiPost<{ response?: string }>('/chat', { message: userMessage })
       .then((data) => {
         setChatHistory((prev) => [
           ...prev,
@@ -112,15 +89,7 @@ const App: React.FC = () => {
   const generateCvFile = () => {
     setGenerateStatus('loading');
     setGenerateMessage(null);
-    fetch('http://localhost:8000/cv/generate', {
-      method: 'POST',
-    })
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error('Failed to generate CV');
-        }
-        return res.json();
-      })
+    apiPost<{ message?: string }>('/cv/generate')
       .then((data) => {
         setGenerateStatus('success');
         setGenerateMessage(data.message ?? 'Generated new CV');
@@ -135,15 +104,7 @@ const App: React.FC = () => {
   const generateMockCvFile = () => {
     setMockGenerateStatus('loading');
     setMockGenerateMessage(null);
-    fetch('http://localhost:8000/cv/generate-mock', {
-      method: 'POST',
-    })
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error('Failed to generate mock CV');
-        }
-        return res.json();
-      })
+    apiPost<{ message?: string }>('/cv/generate-mock')
       .then((data) => {
         setMockGenerateStatus('success');
         setMockGenerateMessage(data.message ?? 'Generated mock CV');
@@ -158,25 +119,9 @@ const App: React.FC = () => {
   const ingestRagIndex = () => {
     setIngestStatus('loading');
     setIngestMessage(null);
-    fetch('http://localhost:8000/rag/ingest', { method: 'POST' })
-      .then((res) => {
-        if (!res.ok) {
-          return res
-            .json()
-            .catch(() => ({}))
-            .then((body) => {
-              const detail =
-                typeof body?.detail === 'string'
-                  ? body.detail
-                  : 'Failed to ingest CVs';
-              throw new Error(detail);
-            });
-        }
-        return res.json();
-      })
+    apiPost<{ documents?: number }>('/rag/ingest')
       .then((data) => {
-        const count =
-          typeof data?.documents === 'number' ? data.documents : undefined;
+        const count = typeof data?.documents === 'number' ? data.documents : undefined;
         setIngestStatus('success');
         setIngestMessage(
           count !== undefined
@@ -192,158 +137,40 @@ const App: React.FC = () => {
 
   return (
     <div className="app-shell">
-      <header className="app-hero">
-        <p className="hero-pill">AI CV Screener</p>
-        <h1>Generate polished CVs & chat with your candidate corpus</h1>
-        <p className="hero-subtitle">
-          {backendStatus || 'Backend status unavailable'}
-        </p>
-        <div className="hero-actions">
-          <button
-            className="btn btn-primary"
-            onClick={generateCvFile}
-            disabled={generateStatus === 'loading'}
-          >
-            {generateStatus === 'loading' ? 'Generating…' : 'Generate CV'}
-          </button>
-          <button
-            className="btn btn-secondary"
-            onClick={generateMockCvFile}
-            disabled={mockGenerateStatus === 'loading'}
-          >
-            {mockGenerateStatus === 'loading' ? 'Mocking…' : 'Mock CV'}
-          </button>
-        </div>
-        {(generateMessage || mockGenerateMessage) && (
-          <div className="hero-feedback">
-            {generateMessage && (
-              <span
-                className={`status-text ${
-                  generateStatus === 'error' ? 'error' : 'success'
-                }`}
-              >
-                {generateMessage}
-              </span>
-            )}
-            {mockGenerateMessage && (
-              <span
-                className={`status-text ${
-                  mockGenerateStatus === 'error' ? 'error' : 'success'
-                }`}
-              >
-                {mockGenerateMessage}
-              </span>
-            )}
-          </div>
-        )}
-      </header>
+      <HeroSection
+        backendStatus={backendStatus}
+        generateStatus={generateStatus}
+        generateMessage={generateMessage}
+        mockStatus={mockGenerateStatus}
+        mockMessage={mockGenerateMessage}
+        onGenerateCv={generateCvFile}
+        onGenerateMock={generateMockCvFile}
+      />
 
       <main className="content-stack">
         <div className="chat-stack">
-          <section className="card rag-card">
-            <div>
-              <p className="rag-label">RAG Maintenance</p>
-              <p className="rag-description">
-                Rebuild the FAISS index when CVs change so chat stays in sync.
-              </p>
-            </div>
-            <div className="rag-actions">
-              <button
-                className="btn btn-secondary"
-                onClick={ingestRagIndex}
-                disabled={ingestStatus === 'loading'}
-              >
-                {ingestStatus === 'loading' ? 'Ingesting…' : 'Ingest CV PDFs'}
-              </button>
-              {ingestMessage && (
-                <span
-                  className={`status-text ${
-                    ingestStatus === 'error' ? 'error' : 'success'
-                  }`}
-                >
-                  {ingestMessage}
-                </span>
-              )}
-            </div>
-          </section>
+          <RagControls
+            ingestStatus={ingestStatus}
+            ingestMessage={ingestMessage}
+            onIngest={ingestRagIndex}
+          />
 
-          <section className="card chat-card">
-            <div className="card-header">
-              <h2>Chat with RAG</h2>
-              <p>Ask questions answered using the indexed CV corpus.</p>
-            </div>
-            <form className="chat-form" onSubmit={handleChatSubmit}>
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Ask about skills, experience, availability…"
-              />
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={chatStatus === 'sending'}
-              >
-                {chatStatus === 'sending' ? 'Sending…' : 'Send'}
-              </button>
-            </form>
-            {chatError && <span className="status-text error">{chatError}</span>}
-            <div className="chat-history">
-              {chatHistory.length === 0 ? (
-                <p className="status-text muted">No messages yet.</p>
-              ) : (
-                chatHistory.map((entry, index) => (
-                  <div
-                    key={`${entry.role}-${index}`}
-                    className={`chat-message ${entry.role}`}
-                  >
-                    <strong>{entry.role === 'user' ? 'You' : 'Assistant'}</strong>
-                    <p>{entry.text}</p>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
+          <ChatPanel
+            chatInput={chatInput}
+            chatHistory={chatHistory}
+            chatStatus={chatStatus}
+            chatError={chatError}
+            onInputChange={setChatInput}
+            onSubmit={handleChatSubmit}
+          />
         </div>
 
-        <section className="card cv-card">
-          <div className="card-header">
-            <h2>CV Library</h2>
-            <p>Browse generated PDFs and open them directly from storage.</p>
-          </div>
-          <div className="card-actions">
-            <button
-              className="btn btn-ghost"
-              onClick={fetchCvFiles}
-              disabled={filesStatus === 'loading'}
-            >
-              {filesStatus === 'loading' ? 'Refreshing…' : 'Refresh list'}
-            </button>
-            {filesStatus === 'error' && filesError && (
-              <span className="status-text error">{filesError}</span>
-            )}
-            {filesStatus === 'loaded' && files.length === 0 && (
-              <span className="status-text muted">
-                No static CVs were found. Generate one above.
-              </span>
-            )}
-          </div>
-          {files.length > 0 && (
-            <ul className="file-grid">
-              {files.map((file) => (
-                <li key={file}>
-                  <a
-                    href={`http://localhost:8000/static/${encodeURIComponent(file)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {file}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <CvLibrary
+          files={files}
+          status={filesStatus}
+          error={filesError}
+          onRefresh={fetchCvFiles}
+        />
       </main>
     </div>
   );

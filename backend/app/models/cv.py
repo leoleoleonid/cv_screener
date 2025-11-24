@@ -13,4 +13,5 @@ class CandidateProfile:
     education: List[Dict[str, str]]
     skills: List[str]
     languages: List[str]
+    gender: Optional[str] = None
     photo_path: Optional[Path] = None

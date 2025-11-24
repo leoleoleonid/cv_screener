@@ -51,8 +51,9 @@ class GeminiImageGenerator(CandidateImageGenerator):
             raise RuntimeError("Gemini credentials are not configured; cannot generate photo.")
 
         self._logger.info("Generating candidate photo via Gemini image model.")
+        descriptor = self._gender_descriptor(profile.gender)
         prompt = (
-            "Professional corporate headshot, medium close-up, neutral background, "
+            f"Professional corporate headshot of a {descriptor}, medium close-up, neutral background, "
             f"role: {profile.title}."
         )
         try:
@@ -81,3 +82,13 @@ class GeminiImageGenerator(CandidateImageGenerator):
         draw.text((160, 230), profile.title[:10], fill=(255, 255, 255))
         image.save(filename)
         return filename
+
+    def _gender_descriptor(self, gender: Optional[str]) -> str:
+        normalized = (gender or "").strip().lower()
+        if normalized in {"female", "woman", "female-presenting"}:
+            return "female professional"
+        if normalized in {"male", "man", "male-presenting"}:
+            return "male professional"
+        if normalized in {"non-binary", "nonbinary", "genderqueer"}:
+            return "non-binary professional"
+        return "professional candidate"
