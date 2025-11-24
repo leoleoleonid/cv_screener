@@ -9,13 +9,6 @@ services:
       - 1.1.1.1
     env_file:
       - ./backend/.env
-    environment:
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
-      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-db+postgresql+psycopg2://ai:ai@postgres:5432/ai_cv}
-      - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:3000","http://127.0.0.1:3000"]}
-      - STATIC_DIR=/app/static
-      - RAG_INDEX_DIR=/app/cv_faiss_index
-      - PHOTOS_DIR=/app/photos
     volumes:
       - ./backend/static:/app/static
       - ./backend/cv_faiss_index:/app/cv_faiss_index
@@ -36,12 +29,6 @@ services:
       - 1.1.1.1
     env_file:
       - ./backend/.env
-    environment:
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
-      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-db+postgresql+psycopg2://ai:ai@postgres:5432/ai_cv}
-      - STATIC_DIR=/app/static
-      - RAG_INDEX_DIR=/app/cv_faiss_index
-      - PHOTOS_DIR=/app/photos
     volumes:
       - ./backend/static:/app/static
       - ./backend/cv_faiss_index:/app/cv_faiss_index
@@ -77,7 +64,7 @@ services:
       dockerfile: frontend/Dockerfile
     container_name: ai-cv-frontend
     environment:
-      - REACT_APP_API_BASE_URL=http://localhost:8000
+      - REACT_APP_API_BASE_URL=http://backend:8000
     depends_on:
       - backend
     ports:

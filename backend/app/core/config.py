@@ -37,7 +37,6 @@ class AppSettings(BaseSettings):
     google_genai_model_name: str = "gemini-2.0-flash"
     google_genai_image_model_name: str = "imagen-4.0-fast-generate-001"
     google_rag_embedding_model: str = "models/text-embedding-004"
-    google_rag_chat_model: str = "gemini-2.0-flash"
 
     # RAG
     rag_chunk_size: int = DEFAULT_RAG_CHUNK_SIZE

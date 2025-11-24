@@ -43,7 +43,7 @@ def build_rag_service(settings: AppSettings) -> RAGService:
         text_extractor=CVTextExtractor(static_dir=settings.static_dir),
         index_dir=settings.rag_index_dir,
         embedding_model=settings.google_rag_embedding_model,
-        chat_model=settings.google_rag_chat_model,
+        chat_model=settings.google_genai_model_name,
         google_api_key=settings.google_genai_api_key,
         chunk_size=settings.rag_chunk_size,
         chunk_overlap=settings.rag_chunk_overlap,
