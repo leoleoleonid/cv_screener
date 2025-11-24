@@ -1,5 +1,4 @@
 import logging
-import os
 import shutil
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -88,9 +87,6 @@ class RAGService:
         self._retriever_k = retriever_k
         self._logger = logging.getLogger(self.__class__.__name__)
 
-        if self._api_key and not os.getenv("GOOGLE_API_KEY"):
-            os.environ["GOOGLE_API_KEY"] = self._api_key
-
     def ingest(self) -> int:
         """Rebuild FAISS index from CV PDFs, returning number of CVs ingested."""
         self._ensure_api_key()
@@ -114,6 +110,7 @@ class RAGService:
         embeddings = GoogleGenerativeAIEmbeddings(
             model=self._embedding_model,
             task_type="RETRIEVAL_DOCUMENT",
+            google_api_key=self._api_key,
         )
         vectorstore = FAISS.from_documents(chunks, embeddings)
         vectorstore.save_local(str(self._index_dir))
@@ -154,6 +151,7 @@ User question:
         llm = ChatGoogleGenerativeAI(
             model=self._chat_model,
             temperature=0.1,
+            google_api_key=self._api_key,
         )
         chain = (
             {
@@ -174,6 +172,7 @@ User question:
         embeddings = GoogleGenerativeAIEmbeddings(
             model=self._embedding_model,
             task_type="RETRIEVAL_QUERY",
+            google_api_key=self._api_key,
         )
         vectorstore = FAISS.load_local(
             str(self._index_dir),

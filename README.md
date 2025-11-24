@@ -9,14 +9,16 @@ Minimal instructions to run the project.
 
 ## Development
 
+Bring up the full stack (API + Celery worker + Redis + Postgres + frontend) with:
+
 ```bash
 docker compose up --build
 ```
 
 - Backend: http://localhost:8000
 - Frontend: http://localhost:3000
-
-The dev stack uses `network_mode: host`, so this command works best on Linux. On macOS/Windows use the production compose file below.
+- Redis: 6379 (Celery broker)
+- Postgres: 5432 (Celery result backend)
 
 ## Production‑style stack
 
@@ -24,13 +26,13 @@ The dev stack uses `network_mode: host`, so this command works best on Linux. On
 docker compose -f docker-compose.prod.yml up --build
 ```
 
-- Backend exposed on http://localhost:8000
-- Frontend exposed on http://localhost:3000 (served via Nginx)
+Same services as above; frontend is built with the production Dockerfile and served on port 3000.
 
 ## Useful API endpoints
 
-- `POST /cv/generate` – generate a new CV via Gemini
-- `POST /cv/generate-mock` – quick mock CV
+- `POST /cv/generate` – queues a new CV generation task
+- `POST /cv/generate-mock` – queues a mock CV generation task
 - `GET /cv` – list available PDF names
-- `POST /rag/ingest` – rebuild FAISS index
+- `POST /rag/ingest` – queues FAISS rebuild
 - `POST /chat` – ask questions backed by RAG
+- `GET /tasks/{task_id}` – poll task status/result

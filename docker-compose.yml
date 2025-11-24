@@ -4,23 +4,85 @@ services:
   backend:
     build: ./backend
     container_name: ai-cv-backend
-    network_mode: host
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    env_file:
+      - ./backend/.env
+    environment:
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-db+postgresql+psycopg2://ai:ai@postgres:5432/ai_cv}
+      - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:3000","http://127.0.0.1:3000"]}
+      - STATIC_DIR=/app/static
+      - RAG_INDEX_DIR=/app/cv_faiss_index
+      - PHOTOS_DIR=/app/photos
     volumes:
       - ./backend/static:/app/static
       - ./backend/cv_faiss_index:/app/cv_faiss_index
       - ./backend/photos:/app/photos
+    depends_on:
+      - redis
+      - postgres
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  worker:
+    build: ./backend
+    container_name: ai-cv-worker
+    command: celery -A app.core.celery_app:celery_app worker --loglevel=info
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     env_file:
       - ./backend/.env
+    environment:
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-db+postgresql+psycopg2://ai:ai@postgres:5432/ai_cv}
+      - STATIC_DIR=/app/static
+      - RAG_INDEX_DIR=/app/cv_faiss_index
+      - PHOTOS_DIR=/app/photos
+    volumes:
+      - ./backend/static:/app/static
+      - ./backend/cv_faiss_index:/app/cv_faiss_index
+      - ./backend/photos:/app/photos
+    depends_on:
+      - redis
+      - postgres
     restart: unless-stopped
-    # ports: 8000:8000  <-- УБРАТЬ, host mode не поддерживает ports
+
+  redis:
+    image: redis:7.4
+    container_name: ai-cv-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    container_name: ai-cv-postgres
+    environment:
+      - POSTGRES_USER=ai
+      - POSTGRES_PASSWORD=ai
+      - POSTGRES_DB=ai_cv
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
 
   frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
     container_name: ai-cv-frontend
-    network_mode: host
+    environment:
+      - REACT_APP_API_BASE_URL=http://localhost:8000
     depends_on:
       - backend
+    ports:
+      - "3000:3000"
     restart: unless-stopped
-    # ports: 3000:3000 <-- тоже убрать
+
+volumes:
+  postgres_data:

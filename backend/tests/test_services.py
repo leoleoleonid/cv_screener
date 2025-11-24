@@ -2,7 +2,7 @@ from pathlib import Path
 
 from fpdf import FPDF
 
-from app.models.cv import CandidateProfile
+from app.domain.models import CandidateProfile
 from app.services.cv_generator import CVGeneratorService
 from app.services.rag import CVTextExtractor
 

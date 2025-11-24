@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 from google import genai
 from google.genai import types as genai_types
 
-from app.models.cv import CandidateProfile
+from app.domain.models import CandidateProfile
 from app.services.cv_generator import CVTextGenerator
 
 

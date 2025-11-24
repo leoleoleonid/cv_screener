@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from fpdf import FPDF
 
-from app.models.cv import CandidateProfile
+from app.domain.models import CandidateProfile
 
 
 class CVTextGenerator(Protocol):

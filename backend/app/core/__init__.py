@@ -1,3 +1,3 @@
 """Core configuration and dependency utilities."""
 
-from .config import Settings  # noqa: F401
+from .config import AppSettings  # noqa: F401

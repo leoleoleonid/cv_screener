@@ -6,6 +6,13 @@ import { ChatPanel } from './components/ChatPanel';
 import { CvLibrary } from './components/CvLibrary';
 import { apiGet, apiPost } from './lib/api';
 
+type TaskStatus = {
+  task_id: string;
+  status: string;
+  result?: Record<string, unknown>;
+  error?: string | null;
+};
+
 const App: React.FC = () => {
   const [backendStatus, setBackendStatus] = useState<string>('Checking backend…');
   const [files, setFiles] = useState<string[]>([]);
@@ -89,11 +96,21 @@ const App: React.FC = () => {
   const generateCvFile = () => {
     setGenerateStatus('loading');
     setGenerateMessage(null);
-    apiPost<{ message?: string }>('/cv/generate')
+    apiPost<{ task_id: string; status: string }>('/cv/generate')
       .then((data) => {
-        setGenerateStatus('success');
-        setGenerateMessage(data.message ?? 'Generated new CV');
-        fetchCvFiles();
+        setGenerateMessage('CV generation queued…');
+        pollTask(data.task_id, (result) => {
+          setGenerateStatus('success');
+          const message =
+            typeof result?.message === 'string'
+              ? result.message
+              : 'Generated new CV';
+          setGenerateMessage(message);
+          fetchCvFiles();
+        }, (errorMessage) => {
+          setGenerateStatus('error');
+          setGenerateMessage(errorMessage);
+        });
       })
       .catch((err) => {
         setGenerateStatus('error');
@@ -104,11 +121,21 @@ const App: React.FC = () => {
   const generateMockCvFile = () => {
     setMockGenerateStatus('loading');
     setMockGenerateMessage(null);
-    apiPost<{ message?: string }>('/cv/generate-mock')
+    apiPost<{ task_id: string; status: string }>('/cv/generate-mock')
       .then((data) => {
-        setMockGenerateStatus('success');
-        setMockGenerateMessage(data.message ?? 'Generated mock CV');
-        fetchCvFiles();
+        setMockGenerateMessage('Mock CV generation queued…');
+        pollTask(data.task_id, (result) => {
+          setMockGenerateStatus('success');
+          const message =
+            typeof result?.message === 'string'
+              ? result.message
+              : 'Generated mock CV';
+          setMockGenerateMessage(message);
+          fetchCvFiles();
+        }, (errorMessage) => {
+          setMockGenerateStatus('error');
+          setMockGenerateMessage(errorMessage);
+        });
       })
       .catch((err) => {
         setMockGenerateStatus('error');
@@ -119,19 +146,66 @@ const App: React.FC = () => {
   const ingestRagIndex = () => {
     setIngestStatus('loading');
     setIngestMessage(null);
-    apiPost<{ documents?: number }>('/rag/ingest')
+    apiPost<{ task_id: string; status: string }>('/rag/ingest')
       .then((data) => {
-        const count = typeof data?.documents === 'number' ? data.documents : undefined;
-        setIngestStatus('success');
-        setIngestMessage(
-          count !== undefined
-            ? `Ingested ${count} CV${count === 1 ? '' : 's'} into RAG index.`
-            : 'RAG index rebuilt.'
+        setIngestMessage('Ingestion queued…');
+        pollTask(
+          data.task_id,
+          (result) => {
+            const count =
+              typeof result?.documents === 'number'
+                ? result.documents
+                : undefined;
+            setIngestStatus('success');
+            setIngestMessage(
+              count !== undefined
+                ? `Ingested ${count} CV${count === 1 ? '' : 's'} into RAG index.`
+                : 'RAG index rebuilt.'
+            );
+          },
+          (errorMessage) => {
+            setIngestStatus('error');
+            setIngestMessage(errorMessage);
+          }
         );
       })
       .catch((err) => {
         setIngestStatus('error');
         setIngestMessage(err.message);
+      });
+  };
+
+  const pollTask = (
+    taskId: string,
+    onSuccess: (result: Record<string, unknown>) => void,
+    onError: (message: string) => void,
+    attempt = 0
+  ) => {
+    const MAX_ATTEMPTS = 40;
+    const RETRY_MS = 1500;
+
+    apiGet<TaskStatus>(`/tasks/${taskId}`)
+      .then((data) => {
+        const status = (data.status || '').toUpperCase();
+        if (status === 'SUCCESS') {
+          onSuccess((data.result as Record<string, unknown>) || {});
+          return;
+        }
+        if (status === 'FAILURE') {
+          onError(data.error || 'Task failed');
+          return;
+        }
+        if (attempt >= MAX_ATTEMPTS) {
+          onError('Task timed out. Please try again.');
+          return;
+        }
+        setTimeout(
+          () => pollTask(taskId, onSuccess, onError, attempt + 1),
+          RETRY_MS
+        );
+      })
+      .catch((err) => {
+        onError(err.message || 'Task check failed');
       });
   };
 
